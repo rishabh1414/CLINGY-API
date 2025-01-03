@@ -4,7 +4,7 @@ const dotenv = require("dotenv");
 const logger = require("morgan");
 const cors = require("cors");
 const qs = require("querystring");
-const axios = require("axios"); // Add axios for making HTTP requests
+const axios = require("axios");
 
 dotenv.config();
 
@@ -18,10 +18,12 @@ app.use(logger("dev"));
 // Middleware to parse JSON
 app.use(express.json());
 
+// CORS configuration
 const corsOptions = {
   origin: "https://sso-app.clingy.app", // Your frontend domain
   methods: ["GET", "POST", "PUT", "DELETE"], // Allowed HTTP methods
   allowedHeaders: ["Content-Type", "Authorization", "x-sso-session"], // Allowed headers
+  credentials: true, // Allow credentials (cookies) to be sent
 };
 
 app.use(cors(corsOptions));
@@ -61,7 +63,6 @@ function ghlSsoGuard(req, res, next) {
 // Controller logic for '/api/sso/ghl'
 app.get("/api/sso/ghl", ghlSsoGuard, (req, res) => {
   console.debug("getUserInfo", req.user);
-  console.log("update 1");
 
   if (!req.user) {
     return res.status(401).json({
@@ -77,16 +78,21 @@ app.get("/oauth/callback", async (req, res) => {
   const { code } = req.query;
 
   if (!code) {
+    console.error("OAuth Authorization Code is missing.");
     return res.status(400).send("No OAuth Authorization Code received.");
   }
 
   try {
-    // Exchange the OAuth code for access token
+    // Exchange the OAuth code for an access token
     const credentials = await getAccessToken(code);
+
+    // Debugging: Log credentials to ensure proper access token retrieval
+    console.debug("OAuth Token Credentials:", credentials);
 
     // Redirect to the thank-you page
     return res.redirect(process.env.GHL_THANK_YOU_PAGE_URL);
   } catch (error) {
+    console.error("Error during OAuth token exchange:", error);
     return res.status(500).send("Error during OAuth token exchange");
   }
 });
@@ -118,6 +124,7 @@ async function getAccessToken(code) {
       throw new Error("Failed to obtain access token");
     }
   } catch (error) {
+    console.error("Error exchanging code for access token:", error);
     throw new Error(`Error exchanging code for access token: ${error.message}`);
   }
 }
@@ -137,6 +144,7 @@ async function apiRequest(method, endpoint, credentials, data = {}) {
 
     return response.data;
   } catch (error) {
+    console.error("API request failed:", error);
     throw new Error(`API request failed: ${error.message}`);
   }
 }
@@ -163,6 +171,7 @@ async function refreshAccessToken(credentials) {
 
     return response.data; // Return new credentials
   } catch (error) {
+    console.error("Error refreshing access token:", error);
     throw new Error(`Error refreshing access token: ${error.message}`);
   }
 }
