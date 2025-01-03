@@ -3,6 +3,7 @@ const crypto = require("crypto-js");
 const dotenv = require("dotenv");
 const logger = require("morgan");
 const cors = require("cors");
+const qs = require("querystring");
 
 dotenv.config();
 
@@ -67,6 +68,101 @@ app.get("/api/sso/ghl", ghlSsoGuard, (req, res) => {
 
   res.json(req.user);
 });
+
+// OAuth callback endpoint
+app.get("/oauth/callback", async (req, res) => {
+  const { code } = req.query;
+
+  if (!code) {
+    return res.status(400).send("No OAuth Authorization Code received.");
+  }
+
+  try {
+    // Exchange the OAuth code for access token
+    const credentials = await getAccessToken(code);
+
+    // Redirect to the thank-you page
+    return res.redirect(process.env.GHL_THANK_YOU_PAGE_URL);
+  } catch (error) {
+    return res.status(500).send("Error during OAuth token exchange");
+  }
+});
+
+// Function to exchange the authorization code for an access token
+async function getAccessToken(code) {
+  const body = qs.stringify({
+    client_id: process.env.GHL_CLIENT_ID,
+    client_secret: process.env.GHL_CLIENT_SECRET,
+    grant_type: "authorization_code",
+    code,
+  });
+
+  try {
+    const response = await axios.post(
+      `${process.env.GHL_API_DOMAIN}/oauth/token`,
+      body,
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
+
+    if (response.data && response.data.access_token) {
+      // Return credentials (access token and refresh token)
+      return response.data;
+    } else {
+      throw new Error("Failed to obtain access token");
+    }
+  } catch (error) {
+    throw new Error(`Error exchanging code for access token: ${error.message}`);
+  }
+}
+
+// Function to make authenticated API requests
+async function apiRequest(method, endpoint, credentials, data = {}) {
+  try {
+    const response = await axios({
+      method,
+      url: `${process.env.GHL_API_DOMAIN}${endpoint}`,
+      headers: {
+        Authorization: `Bearer ${credentials.access_token}`,
+        "Content-Type": "application/json",
+      },
+      data,
+    });
+
+    return response.data;
+  } catch (error) {
+    throw new Error(`API request failed: ${error.message}`);
+  }
+}
+
+// Function to refresh the access token
+async function refreshAccessToken(credentials) {
+  const body = qs.stringify({
+    client_id: process.env.GHL_CLIENT_ID,
+    client_secret: process.env.GHL_CLIENT_SECRET,
+    grant_type: "refresh_token",
+    refresh_token: credentials.refresh_token,
+  });
+
+  try {
+    const response = await axios.post(
+      `${process.env.GHL_API_DOMAIN}/oauth/token`,
+      body,
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
+
+    return response.data; // Return new credentials
+  } catch (error) {
+    throw new Error(`Error refreshing access token: ${error.message}`);
+  }
+}
 
 // Start the server
 app.listen(PORT, () => {
