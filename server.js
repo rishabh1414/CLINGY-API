@@ -9,7 +9,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
+console.log("App LOaded");
 // Middleware for logging requests
 app.use(logger("dev"));
 
