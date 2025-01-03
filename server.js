@@ -16,8 +16,13 @@ app.use(logger("dev"));
 // Middleware to parse JSON
 app.use(express.json());
 
-// Allow CORS from the iframe's domain
-app.use(cors());
+const corsOptions = {
+  origin: "https://sso-app.clingy.app", // Your frontend domain
+  methods: ["GET", "POST", "PUT", "DELETE"], // Allowed HTTP methods
+  allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
+};
+
+app.use(cors(corsOptions));
 
 // GHL SSO Guard middleware
 function ghlSsoGuard(req, res, next) {
@@ -54,6 +59,7 @@ function ghlSsoGuard(req, res, next) {
 // Controller logic for '/api/sso/ghl'
 app.get("/api/sso/ghl", ghlSsoGuard, (req, res) => {
   console.debug("getUserInfo", req.user);
+  console.log("update 1");
 
   if (!req.user) {
     return res.status(401).json({
