@@ -120,6 +120,9 @@ async function getAccessToken(code) {
         },
       }
     );
+    console.log("--_____---__---____---___-------------------------");
+    console.log(response);
+    console.log("--_____---__---____---___-------------------------");
 
     if (response.data && response.data.access_token) {
       // Return credentials (access token and refresh token)
