@@ -76,7 +76,7 @@ app.get("/api/sso/ghl", ghlSsoGuard, (req, res) => {
 // OAuth callback endpoint
 app.get("/oauth/callback", async (req, res) => {
   const { code } = req.query;
-
+  console.log(code);
   if (!code) {
     console.error("OAuth Authorization Code is missing.");
     return res.status(400).send("No OAuth Authorization Code received.");
@@ -85,7 +85,7 @@ app.get("/oauth/callback", async (req, res) => {
   try {
     // Exchange the OAuth code for an access token
     const credentials = await getAccessToken(code);
-
+    console.log(credentials);
     // Debugging: Log credentials to ensure proper access token retrieval
     console.debug("OAuth Token Credentials:", credentials);
 
@@ -105,7 +105,11 @@ async function getAccessToken(code) {
     grant_type: "authorization_code",
     code,
   });
-
+  console.log("----------------------------------------");
+  console.log(process.env.GHL_CLIENT_ID);
+  console.log(process.env.GHL_CLIENT_SECRET);
+  console.log(code);
+  console.log("----------------------------------------");
   try {
     const response = await axios.post(
       `${process.env.GHL_API_DOMAIN}/oauth/token`,
@@ -125,7 +129,6 @@ async function getAccessToken(code) {
     }
   } catch (error) {
     console.error("Error exchanging code for access token:", error);
-    throw new Error(`Error exchanging code for access token: ${error.message}`);
   }
 }
 
@@ -145,7 +148,7 @@ async function apiRequest(method, endpoint, credentials, data = {}) {
     return response.data;
   } catch (error) {
     console.error("API request failed:", error);
-    throw new Error(`API request failed: ${error.message}`);
+    // throw new Error(`API request failed: ${error.message}`);
   }
 }
 
