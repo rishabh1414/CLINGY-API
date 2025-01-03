@@ -73,7 +73,7 @@ app.get("/api/sso/ghl", ghlSsoGuard, (req, res) => {
   res.json(req.user);
 });
 
-// OAuth callback endpoint
+/// OAuth callback endpoint
 app.get("/oauth/callback", async (req, res) => {
   const { code } = req.query;
   console.log(code);
@@ -88,6 +88,16 @@ app.get("/oauth/callback", async (req, res) => {
     console.log(credentials);
     // Debugging: Log credentials to ensure proper access token retrieval
     console.debug("OAuth Token Credentials:", credentials);
+
+    // Set the access token in a secure cookie for frontend access
+    res.cookie("accessToken", credentials.access_token, {
+      httpOnly: true, // Makes cookie accessible only via HTTP requests, not JS (security measure)
+      secure: true, // Ensures cookie is sent only over HTTPS
+      domain: ".clingy.app", // Shared domain, if both frontend and backend are on subdomains of this domain
+      path: "/", // Path where the cookie is available
+      maxAge: 3600000, // 1 hour expiry
+      sameSite: "None",
+    });
 
     // Redirect to the thank-you page
     return res.redirect(process.env.GHL_THANK_YOU_PAGE_URL);
