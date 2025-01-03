@@ -18,46 +18,13 @@ app.use(logger("dev"));
 // Middleware to parse JSON
 app.use(express.json());
 
-// CORS configuration
 const corsOptions = {
   origin: "https://sso-app.clingy.app", // Your frontend domain
   methods: ["GET", "POST", "PUT", "DELETE"], // Allowed HTTP methods
-  allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
+  allowedHeaders: ["Content-Type", "Authorization", "x-sso-session"], // Allowed headers
 };
 
 app.use(cors(corsOptions));
-
-// GHL SSO Guard middleware
-function ghlSsoGuard(req, res, next) {
-  const encryptedSession = req.headers["x-sso-session"];
-
-  if (!encryptedSession) {
-    console.error(
-      "No GHL SSO session key provided, did you forget to include the `x-sso-session` header?"
-    );
-    return res.status(401).json({
-      error: "Unauthorized: Missing SSO session key.",
-    });
-  }
-
-  try {
-    const decryptedSession = crypto.AES.decrypt(
-      encryptedSession,
-      process.env.GHL_SSO_KEY
-    ).toString(crypto.enc.Utf8);
-
-    req.user = JSON.parse(decryptedSession);
-    next();
-  } catch (err) {
-    console.warn(
-      `Invalid GHL SSO session key provided, please try again: ${err.message}`
-    );
-    console.error(err);
-    return res.status(401).json({
-      error: "Unauthorized: Invalid SSO session key.",
-    });
-  }
-}
 
 // Controller logic for '/api/sso/ghl'
 app.get("/api/sso/ghl", ghlSsoGuard, (req, res) => {
