@@ -4,18 +4,21 @@ const dotenv = require("dotenv");
 const logger = require("morgan");
 const cors = require("cors");
 const qs = require("querystring");
+const axios = require("axios"); // Add axios for making HTTP requests
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-console.log("App LOaded");
+console.log("App Loaded");
+
 // Middleware for logging requests
 app.use(logger("dev"));
 
 // Middleware to parse JSON
 app.use(express.json());
 
+// CORS configuration
 const corsOptions = {
   origin: "https://sso-app.clingy.app", // Your frontend domain
   methods: ["GET", "POST", "PUT", "DELETE"], // Allowed HTTP methods
