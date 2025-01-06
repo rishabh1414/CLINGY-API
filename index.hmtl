@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GHL SSO Integration</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        #user-session-loading {
+            font-size: 1.2em;
+            color: #555;
+        }
+
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Welcome to GHL SSO Integration</h1>
+    <p id="user-session-loading">Loading user session...</p>
+    <pre id="txt-user-session"></pre>
+
+    <script>
+        /**
+         * A helper service to interact with the parent GHL app and fetch user info.
+         */
+        window.sso = window.sso || {
+            async getUserInfo() {
+                console.log("Starting getUserInfo...");
+                const sessionKey = await new Promise((resolve, reject) => {
+                    console.log("Sending message to parent app to request user data...");
+                    window.parent.postMessage({ message: 'REQUEST_USER_DATA' }, '*');
+                    window.postMessage({ message: 'REQUEST_USER_DATA' }, '*');
+                    const listener = ({ data, origin }) => {
+                        console.log("Received message from parent app:", data, "Origin:", origin);
+
+                        if (data.message === 'REQUEST_USER_DATA_RESPONSE') {
+                            console.log("Session key received from parent app:", data.payload);
+                            resolve(data.payload);
+                            window.removeEventListener('message', listener);
+                        }
+                    };
+
+                    window.addEventListener('message', listener);
+
+                    // Timeout to handle cases where the parent app does not respond
+                    setTimeout(() => {
+                        reject("Timeout: No response received from parent app.");
+                        window.removeEventListener('message', listener);
+                    }, 10000); // 10 seconds timeout
+                });
+
+                console.log("Fetching user data from backend with session key:", sessionKey);
+                const res = await fetch('https://ghl-api.onrender.com/api/sso/ghl', {
+                    headers: { 'x-sso-session': sessionKey },
+                });
+
+                if (!res.ok) {
+                    console.error("Backend returned an error:", res.status, res.statusText);
+                    throw new Error('Failed to fetch user info from backend.');
+                }
+
+                const data = await res.json();
+                console.log("User data fetched from backend:", data);
+                return data;
+            },
+        };
+
+        // On DOMContentLoaded, fetch and display user info
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log("DOMContentLoaded event triggered. Starting user session loading...");
+            try {
+                const data = await window.sso.getUserInfo();
+                await fetchTokenAndStoreInCookies(data.activeLocation)
+
+                // Redact sensitive fields for display
+                data.userId = '•••••••••••••••••••• (redacted)';
+                data.companyId = '•••••••••••••••••••• (redacted)';
+
+                // Hide the loading message and display user info
+                document.getElementById('user-session-loading').style.display = 'none';
+                document.getElementById('txt-user-session').innerHTML = JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById('user-session-loading').innerText = 'Error loading user session.';
+                console.error("Error loading user session:", err);
+            }
+        });
+
+        // Function to make the API request and store the token in cookies
+        async function fetchTokenAndStoreInCookies(id) {
+            const locationId = id // Replace with actual location ID
+
+            try {
+                const response = await fetch("http://localhost:3000/api/store-token", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ locationId }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Extract the access_token from the response data
+                    const { access_token } = data;
+
+                    // Store the access_token in cookies (as 'c_token')
+                    document.cookie = `c_token=${access_token}; path=/; max-age=86400`; // 86400 seconds = 1 day
+
+                    console.log("Token stored in cookies:", access_token);
+                } else {
+                    console.error("Failed to fetch token:", data.error);
+                }
+            } catch (error) {
+                console.error("Error:", error);
+            }
+        }
+
+
+    </script>
+</body>
+
+</html>
