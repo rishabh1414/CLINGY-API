@@ -19,18 +19,9 @@ app.use(logger("dev"));
 // Middleware to parse JSON
 app.use(express.json());
 
-const corsOptions = {
-  origin: "*", // Allow all origins
-  methods: ["*"], // Allow all methods
-  allowedHeaders: ["*"], // Allow specific headers
-  credentials: true, // Allow credentials (cookies, etc.)
-};
-
 // Apply CORS middleware globally
-app.use(cors(corsOptions));
+app.use(cors());
 
-// Also, handle preflight OPTIONS requests
-app.options("*", cors(corsOptions));
 // Connect to MongoDB
 mongoose
   .connect(process.env.MONGODB_URI)
