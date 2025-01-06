@@ -18,20 +18,17 @@ app.use(logger("dev"));
 
 // Middleware to parse JSON
 app.use(express.json());
-
 // CORS configuration
 const corsOptions = {
   origin: "https://sso-app.clingy.app", // Your frontend domain
   methods: ["GET", "POST", "PUT", "DELETE"], // Allowed HTTP methods
   allowedHeaders: ["Content-Type", "Authorization", "x-sso-session"], // Allowed headers
   credentials: true, // Allow credentials (cookies) to be sent
-  preflightContinue: false, // End the preflight response with a 200 status code
-  optionsSuccessStatus: 204, // Some legacy browsers (IE11, various SmartTVs) choke on 204
+  preflightContinue: false, // Pre-flight requests are handled automatically by default
+  optionsSuccessStatus: 204, // Some legacy browsers choke on 204
 };
-
-// Use CORS middleware
+// Apply CORS middleware globally
 app.use(cors(corsOptions));
-
 // Connect to MongoDB
 mongoose
   .connect(process.env.MONGODB_URI)
@@ -59,26 +56,27 @@ function ghlSsoGuard(req, res, next) {
   const encryptedSession = req.headers["x-sso-session"];
 
   if (!encryptedSession) {
-    console.error(
-      "No GHL SSO session key provided, did you forget to include the `x-sso-session` header?"
-    );
+    console.error("No GHL SSO session key provided.");
     return res.status(401).json({
       error: "Unauthorized: Missing SSO session key.",
     });
   }
 
   try {
+    // Decrypt the session key using AES
     const decryptedSession = crypto.AES.decrypt(
       encryptedSession,
       process.env.GHL_SSO_KEY
-    ).toString(crypto.enc.Utf8);
+    ).toString(crypto.enc.Utf8); // Ensure the output is in UTF-8 format
 
-    req.user = JSON.parse(decryptedSession);
-    next();
+    if (!decryptedSession) {
+      throw new Error("Failed to decrypt session");
+    }
+
+    req.user = JSON.parse(decryptedSession); // Parse decrypted session into user data
+    next(); // Proceed to the next middleware/route handler
   } catch (err) {
-    console.warn(
-      `Invalid GHL SSO session key provided, please try again: ${err.message}`
-    );
+    console.warn(`Invalid GHL SSO session key: ${err.message}`);
     console.error(err);
     return res.status(401).json({
       error: "Unauthorized: Invalid SSO session key.",
@@ -96,7 +94,7 @@ app.get("/api/sso/ghl", ghlSsoGuard, (req, res) => {
     });
   }
 
-  res.json(req.user);
+  res.json(req.user); // Send user data as JSON response
 });
 
 // OAuth callback endpoint
