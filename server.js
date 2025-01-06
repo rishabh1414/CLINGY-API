@@ -5,6 +5,7 @@ const logger = require("morgan");
 const cors = require("cors");
 const qs = require("querystring");
 const axios = require("axios");
+const mongoose = require("mongoose");
 
 dotenv.config();
 
@@ -27,6 +28,28 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Connect to MongoDB
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("MongoDB connection error:", err));
+
+// OAuth Credentials Schema
+const OAuthCredentialsSchema = new mongoose.Schema({
+  access_token: String,
+  refresh_token: String,
+  expires_in: Number, // Expiry time in seconds
+  userId: String,
+  locationId: String,
+  companyId: String,
+  created_at: { type: Date, default: Date.now },
+});
+
+const OAuthCredentials = mongoose.model(
+  "OAuthCredentials",
+  OAuthCredentialsSchema
+);
 
 // GHL SSO Guard middleware
 function ghlSsoGuard(req, res, next) {
@@ -73,36 +96,41 @@ app.get("/api/sso/ghl", ghlSsoGuard, (req, res) => {
   res.json(req.user);
 });
 
-/// OAuth callback endpoint
+// OAuth callback endpoint
 app.get("/oauth/callback", async (req, res) => {
   const { code } = req.query;
-  console.log(code);
   if (!code) {
-    console.error("OAuth Authorization Code is missing.");
     return res.status(400).send("No OAuth Authorization Code received.");
   }
 
   try {
-    // Exchange the OAuth code for an access token
     const credentials = await getAccessToken(code);
-    console.log(credentials);
-    // Debugging: Log credentials to ensure proper access token retrieval
-    console.debug("OAuth Token Credentials:", credentials);
+    const {
+      access_token,
+      refresh_token,
+      expires_in,
+      userId,
+      locationId,
+      companyId,
+    } = credentials;
 
-    // Set the access token in a secure cookie for frontend access
-    res.cookie("accessToken", credentials.access_token, {
-      httpOnly: true, // Makes cookie accessible only via HTTP requests, not JS (security measure)
-      secure: true, // Ensures cookie is sent only over HTTPS
-      domain: ".clingy.app", // Shared domain, if both frontend and backend are on subdomains of this domain
-      path: "/", // Path where the cookie is available
-      maxAge: 3600000, // 1 hour expiry
-      sameSite: "None",
+    // Save only important fields to MongoDB
+    const oauthCredentials = new OAuthCredentials({
+      access_token,
+      refresh_token,
+      expires_in,
+      userId,
+      locationId,
+      companyId,
     });
 
-    // Redirect to the thank-you page
+    await oauthCredentials.save(); // Save to MongoDB
+
+    // Set up automatic refresh before the token expires (86400 seconds)
+    setTokenRefresh(oauthCredentials);
+
     return res.redirect(process.env.GHL_THANK_YOU_PAGE_URL);
   } catch (error) {
-    console.error("Error during OAuth token exchange:", error);
     return res.status(500).send("Error during OAuth token exchange");
   }
 });
@@ -115,11 +143,7 @@ async function getAccessToken(code) {
     grant_type: "authorization_code",
     code,
   });
-  console.log("----------------------------------------");
-  console.log(process.env.GHL_CLIENT_ID);
-  console.log(process.env.GHL_CLIENT_SECRET);
-  console.log(code);
-  console.log("----------------------------------------");
+
   try {
     const response = await axios.post(
       `${process.env.GHL_API_DOMAIN}/oauth/token`,
@@ -130,9 +154,6 @@ async function getAccessToken(code) {
         },
       }
     );
-    console.log("--_____---__---____---___-------------------------");
-    console.log(response);
-    console.log("--_____---__---____---___-------------------------");
 
     if (response.data && response.data.access_token) {
       // Return credentials (access token and refresh token)
@@ -145,33 +166,34 @@ async function getAccessToken(code) {
   }
 }
 
-// Function to make authenticated API requests
-async function apiRequest(method, endpoint, credentials, data = {}) {
-  try {
-    const response = await axios({
-      method,
-      url: `${process.env.GHL_API_DOMAIN}${endpoint}`,
-      headers: {
-        Authorization: `Bearer ${credentials.access_token}`,
-        "Content-Type": "application/json",
-      },
-      data,
-    });
+// Function to refresh the access token before it expires
+async function setTokenRefresh(oauthCredentials) {
+  const refreshTokenBeforeExpiry = oauthCredentials.expires_in - 300; // Refresh 5 minutes before expiration
 
-    return response.data;
-  } catch (error) {
-    console.error("API request failed:", error);
-    // throw new Error(`API request failed: ${error.message}`);
-  }
+  setTimeout(async () => {
+    try {
+      const newCredentials = await refreshAccessToken(
+        oauthCredentials.refresh_token
+      );
+      // Save the new credentials to the database
+      await OAuthCredentials.updateOne(
+        { refresh_token: oauthCredentials.refresh_token },
+        { $set: newCredentials }
+      );
+      console.log("Access token refreshed successfully.");
+    } catch (error) {
+      console.error("Error refreshing access token:", error);
+    }
+  }, refreshTokenBeforeExpiry * 1000); // Set timeout in milliseconds
 }
 
 // Function to refresh the access token
-async function refreshAccessToken(credentials) {
+async function refreshAccessToken(refresh_token) {
   const body = qs.stringify({
     client_id: process.env.GHL_CLIENT_ID,
     client_secret: process.env.GHL_CLIENT_SECRET,
     grant_type: "refresh_token",
-    refresh_token: credentials.refresh_token,
+    refresh_token,
   });
 
   try {
