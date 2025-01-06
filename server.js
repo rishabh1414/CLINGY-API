@@ -25,8 +25,11 @@ const corsOptions = {
   methods: ["GET", "POST", "PUT", "DELETE"], // Allowed HTTP methods
   allowedHeaders: ["Content-Type", "Authorization", "x-sso-session"], // Allowed headers
   credentials: true, // Allow credentials (cookies) to be sent
+  preflightContinue: false, // End the preflight response with a 200 status code
+  optionsSuccessStatus: 204, // Some legacy browsers (IE11, various SmartTVs) choke on 204
 };
 
+// Use CORS middleware
 app.use(cors(corsOptions));
 
 // Connect to MongoDB
@@ -214,6 +217,73 @@ async function refreshAccessToken(refresh_token) {
   }
 }
 
+// API endpoint to fetch token and send it as response
+app.post("/api/store-token", async (req, res) => {
+  const { locationId } = req.body; // Get locationId from the frontend request
+
+  if (!locationId) {
+    return res.status(400).json({ error: "Location ID is required" });
+  }
+
+  try {
+    // Fetch OAuth credentials from the database
+    const oauthCredentials = await OAuthCredentials.findOne({});
+    if (!oauthCredentials) {
+      return res
+        .status(400)
+        .json({ error: "OAuth credentials not found in database" });
+    }
+
+    const { access_token, companyId } = oauthCredentials;
+
+    const url = "https://services.leadconnectorhq.com/oauth/locationToken";
+    const options = {
+      method: "POST",
+      headers: {
+        Version: "2021-07-28",
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+        Authorization: `Bearer ${access_token}`, // Get access token from the database
+      },
+      body: new URLSearchParams({
+        companyId: companyId, // Get companyId from the database
+        locationId: locationId, // Get locationId from the request body
+      }),
+    };
+
+    const response = await fetch(url, options);
+    const data = await response.json();
+
+    if (response.ok) {
+      // Assuming the response contains a field 'c_token' for the access token
+      const {
+        access_token,
+        token_typ,
+        expires_in,
+        refresh_token,
+        scope,
+        locationId,
+      } = data;
+
+      // Send the token as a response to the client
+      return res.status(200).json({
+        access_token,
+        token_typ,
+        expires_in,
+        refresh_token,
+        scope,
+        locationId,
+      });
+    } else {
+      return res
+        .status(400)
+        .json({ error: "Failed to fetch token", details: data });
+    }
+  } catch (error) {
+    console.error("Error fetching token:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
