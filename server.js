@@ -113,6 +113,7 @@ async function getAccessToken(code) {
     client_id: process.env.GHL_CLIENT_ID,
     client_secret: process.env.GHL_CLIENT_SECRET,
     grant_type: "authorization_code",
+    user_type: "Location",
     code,
   });
   console.log("----------------------------------------");
