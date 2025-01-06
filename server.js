@@ -21,7 +21,7 @@ app.use(express.json());
 
 // CORS configuration
 const corsOptions = {
-  origin: "https://sso-app.clingy.app", // Allow frontend domain
+  origin: ["https://sso-app.clingy.app", "https://portal.clingy.app"], // Allow frontend domain
   methods: ["GET", "POST", "PUT", "DELETE"], // Allowed HTTP methods
   allowedHeaders: ["Content-Type", "Authorization", "x-sso-session"], // Allowed headers
   credentials: true, // Allow cookies/credentials
@@ -29,7 +29,17 @@ const corsOptions = {
 
 // Apply CORS middleware globally
 app.use(cors(corsOptions));
-app.options("/api/sso/ghl", cors(corsOptions));
+
+// Custom preflight handling for specific endpoint
+app.options("/api/sso/ghl", (req, res) => {
+  res.header("Access-Control-Allow-Origin", "https://sso-app.clingy.app");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, x-sso-session"
+  );
+  res.sendStatus(200);
+});
 // Connect to MongoDB
 mongoose
   .connect(process.env.MONGODB_URI)
