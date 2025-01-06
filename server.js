@@ -29,6 +29,7 @@ const corsOptions = {
 
 // Apply CORS middleware globally
 app.use(cors(corsOptions));
+app.options("/api/sso/ghl", cors(corsOptions));
 // Connect to MongoDB
 mongoose
   .connect(process.env.MONGODB_URI)
