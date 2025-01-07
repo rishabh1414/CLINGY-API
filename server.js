@@ -50,6 +50,7 @@ const OAuthCredentials = mongoose.model(
 // GHL SSO Guard middleware
 function ghlSsoGuard(req, res, next) {
   const encryptedSession = req.headers["x-sso-session"];
+  console.log(encryptedSession);
 
   if (!encryptedSession) {
     console.error("No GHL SSO session key provided.");
