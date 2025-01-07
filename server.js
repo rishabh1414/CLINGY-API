@@ -28,7 +28,13 @@ app.use(
     allowedHeaders: ["Content-Type", "x-sso-session"],
   })
 );
-
+app.options("/api/sso/ghl", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "https://sso-app.clingy.app");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-sso-session");
+  res.status(204).send(); // No content for OPTIONS preflight
+});
 // Connect to MongoDB
 mongoose
   .connect(process.env.MONGODB_URI)
