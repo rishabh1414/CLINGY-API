@@ -21,19 +21,22 @@ app.use(logger("dev"));
 
 // Middleware to parse JSON
 app.use(express.json());
+
 app.use(
   cors({
-    origin: "https://sso-app.clingy.app", // Replace '*' with specific domains for better security
-    methods: ["*"],
-    allowedHeaders: ["Content-Type", "x-sso-session"],
+    origin: "https://sso-app.clingy.app", // Explicitly allow your frontend domain
+    credentials: true, // Allow credentials (cookies, authorization headers)
+    methods: ["GET", "POST", "OPTIONS"], // Explicitly specify allowed methods
+    allowedHeaders: ["Content-Type", "x-sso-session"], // Allowed custom headers
   })
 );
+
 app.options("/api/sso/ghl", (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "https://sso-app.clingy.app");
-  res.setHeader("Access-Control-Allow-Credentials", true);
+  res.setHeader("Access-Control-Allow-Credentials", "true"); // Ensure it's a string "true"
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-sso-session");
-  res.status(204).send(); // No content for OPTIONS preflight
+  res.status(204).send(); // Send a 204 No Content response for OPTIONS
 });
 // Connect to MongoDB
 mongoose
