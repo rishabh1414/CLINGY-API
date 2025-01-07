@@ -310,7 +310,7 @@ app.post("/api/store-token", async (req, res) => {
       }
     );
 
-    if (response.status === 200) {
+    if (response.status === 201) {
       res.json({ locationToken: response.data.access_token });
     } else {
       res
