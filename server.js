@@ -130,7 +130,10 @@ app.get("/oauth/callback", async (req, res) => {
       companyId,
     } = credentials;
 
-    // Save only important fields to MongoDB
+    // Delete existing records with the same companyId
+    await OAuthCredentials.deleteMany({ companyId });
+
+    // Save the new record to MongoDB
     const oauthCredentials = new OAuthCredentials({
       access_token,
       refresh_token,
@@ -140,13 +143,14 @@ app.get("/oauth/callback", async (req, res) => {
       companyId,
     });
 
-    await oauthCredentials.save(); // Save to MongoDB
+    await oauthCredentials.save(); // Save the new record
 
     // Set up automatic refresh before the token expires (86400 seconds)
     setTokenRefresh(oauthCredentials);
 
     return res.redirect(process.env.GHL_THANK_YOU_PAGE_URL);
   } catch (error) {
+    console.error("Error during OAuth token exchange:", error);
     return res.status(500).send("Error during OAuth token exchange");
   }
 });
