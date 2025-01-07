@@ -410,13 +410,24 @@ async function refreshToken(userId) {
   }
 }
 
-// Example: Call this function periodically to check token expiry
+// Function to check token expiry and refresh if necessary
 async function checkAndRefreshToken() {
-  const userId = "677cd74aeab0f9937014e5e3"; // Replace with the actual user ID
-  await refreshToken(userId);
+  try {
+    // Fetch the first record from the collection
+    const credential = await OAuthCredentials.findOne().sort({ _id: 1 });
+
+    if (!credential) {
+      console.log("No credentials found.");
+      return;
+    }
+    const userId = credential?._id; // Replace with the actual user ID
+    await refreshToken(userId);
+  } catch (error) {
+    console.error("Error checking and refreshing token:", error);
+  }
 }
 
-// Schedule token refresh check every 30 minutes using node-cron
+// Schedule token refresh check every 30 minutes
 cron.schedule("*/30 * * * *", checkAndRefreshToken); // Runs every 30 minutes
 
 // Define the file path
