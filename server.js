@@ -7,9 +7,9 @@ const qs = require("querystring");
 const axios = require("axios");
 const mongoose = require("mongoose");
 const cron = require("node-cron");
-
 const fs = require("fs");
 const path = require("path");
+
 dotenv.config();
 
 const app = express();
@@ -38,6 +38,7 @@ app.options("/api/sso/ghl", (req, res) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-sso-session");
   res.status(204).send(); // Send a 204 No Content response for OPTIONS
 });
+
 // Connect to MongoDB
 mongoose
   .connect(process.env.MONGODB_URI)
@@ -60,15 +61,9 @@ const OAuthCredentials = mongoose.model(
   OAuthCredentialsSchema
 );
 
-app.use((req, res, next) => {
-  console.log("Incoming headers:", req.headers);
-  next();
-});
-
 // GHL SSO Guard middleware
 function ghlSsoGuard(req, res, next) {
   const encryptedSession = req.headers["x-sso-session"];
-  console.log(encryptedSession);
 
   if (!encryptedSession) {
     console.error("No GHL SSO session key provided.");
@@ -256,24 +251,22 @@ app.post("/api/get-location-token", async (req, res) => {
 
     // Step 2: Use the agency access token as a header to fetch the location access token
     const url = "https://services.leadconnectorhq.com/oauth/locationToken";
-    const options = {
-      method: "POST",
-      headers: {
-        Version: "2021-07-28",
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-        Authorization: `Bearer ${agencyTokens.access_token}`, // Using the agency access token as Bearer token
-      },
-      body: new URLSearchParams({
-        companyId,
-        locationId,
-      }),
-    };
+    const response = await axios.post(
+      url,
+      qs.stringify({ companyId, locationId }),
+      {
+        headers: {
+          Version: "2021-07-28",
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+          Authorization: `Bearer ${agencyTokens.access_token}`, // Using the agency access token as Bearer token
+        },
+      }
+    );
 
-    const response = await fetch(url, options);
-    const data = await response.json();
+    const data = response.data;
 
-    if (response.ok) {
+    if (response.status === 200) {
       // Return the location access token in the response
       return res.json(data);
     } else {
@@ -304,164 +297,33 @@ app.post("/api/store-token", async (req, res) => {
         .json({ error: "OAuth credentials not found in database" });
     }
 
-    const { access_token, companyId } = oauthCredentials;
+    const { access_token } = oauthCredentials;
 
-    const url = "https://services.leadconnectorhq.com/oauth/locationToken";
-    const options = {
-      method: "POST",
-      headers: {
-        Version: "2021-07-28",
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-        Authorization: `Bearer ${access_token}`, // Get access token from the database
-      },
-      body: new URLSearchParams({
-        companyId: companyId, // Get companyId from the database
-        locationId: locationId, // Get locationId from the request body
-      }),
-    };
+    // Make a request to get the location token using axios
+    const response = await axios.post(
+      `${process.env.GHL_API_DOMAIN}/oauth/locationToken`,
+      qs.stringify({ locationId }),
+      {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      }
+    );
 
-    const response = await fetch(url, options);
-    const data = await response.json();
-
-    if (response.ok) {
-      // Assuming the response contains a field 'c_token' for the access token
-      const {
-        access_token,
-        token_typ,
-        expires_in,
-        refresh_token,
-        scope,
-        locationId,
-      } = data;
-
-      // Send the token as a response to the client
-      return res.status(200).json({
-        access_token,
-        token_typ,
-        expires_in,
-        refresh_token,
-        scope,
-        locationId,
-      });
+    if (response.status === 200) {
+      res.json({ locationToken: response.data.access_token });
     } else {
-      return res
-        .status(400)
-        .json({ error: "Failed to fetch token", details: data });
+      res
+        .status(response.status)
+        .json({ message: "Failed to get location token" });
     }
   } catch (error) {
-    console.error("Error fetching token:", error);
-    return res.status(500).json({ error: "Internal Server Error" });
+    console.error("Error getting location token:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 
-// Function to refresh token using refresh_token
-async function refreshToken(userId) {
-  try {
-    // Fetch OAuth credentials from the database
-    const credentials = await OAuthCredentials.findOne({ _id: userId });
-    if (!credentials) {
-      console.error("No credentials found for this user.");
-      return;
-    }
-
-    const { refresh_token, expires_in } = credentials;
-    // Check if token is about to expire in less than an hour (86399 seconds)
-    const currentTime = Math.floor(Date.now() / 1000); // Current time in seconds
-    const expireTime = currentTime + 3600; // One hour before expiration
-    const tokenExpiryTime =
-      credentials.created_at.getTime() / 1000 + expires_in;
-
-    if (tokenExpiryTime - expireTime <= 0) {
-      // Make the API call to refresh the token
-      const url = "https://services.leadconnectorhq.com/oauth/token";
-      const options = {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: new URLSearchParams({
-          client_id: process.env.GHL_CLIENT_ID,
-          client_secret: process.env.GHL_CLIENT_SECRET,
-          grant_type: "refresh_token",
-          refresh_token: refresh_token,
-          user_type: "Company",
-        }),
-      };
-
-      // Fetch the new access and refresh tokens
-      const response = await fetch(url, options);
-      const data = await response.json();
-      console.log(data);
-      if (data.access_token && data.refresh_token) {
-        // Update the database with new tokens
-        await OAuthCredentials.updateOne({ _id: userId }, data);
-
-        console.log("Tokens refreshed and updated in the database.");
-      } else {
-        console.error("Failed to refresh tokens. API response:", data);
-      }
-    } else {
-      console.log("No need to refresh token yet.");
-    }
-  } catch (error) {
-    console.error("Error refreshing token:", error);
-  }
-}
-
-// Function to check token expiry and refresh if necessary
-async function checkAndRefreshToken() {
-  try {
-    // Fetch the first record from the collection
-    const credential = await OAuthCredentials.findOne().sort({ _id: 1 });
-
-    if (!credential) {
-      console.log("No credentials found.");
-      return;
-    }
-    const userId = credential?._id; // Replace with the actual user ID
-    await refreshToken(userId);
-  } catch (error) {
-    console.error("Error checking and refreshing token:", error);
-  }
-}
-
-// Schedule token refresh check every 30 minutes
-cron.schedule("*/30 * * * *", checkAndRefreshToken); // Runs every 30 minutes
-
-// Define the file path
-const filePath = path.join(__dirname, "server-reload-log.txt");
-
-// Function to format the date in UTC
-function formatUTCDate(date) {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0"); // Months are 0-indexed
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  const hours = String(date.getUTCHours()).padStart(2, "0");
-  const minutes = String(date.getUTCMinutes()).padStart(2, "0");
-  const seconds = String(date.getUTCSeconds()).padStart(2, "0");
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-}
-
-// Function to log server reload details
-function logServerReload() {
-  const timestamp = formatUTCDate(new Date());
-  const logMessage = `Server reloaded at: ${timestamp}\n`;
-
-  fs.appendFile(filePath, logMessage, (err) => {
-    if (err) {
-      console.error("Error writing to log file:", err);
-    } else {
-      console.log("Server reload details logged in UTC.");
-    }
-  });
-}
-
-// Log reload details when the server starts
-logServerReload();
-
-// Start the server
+// Set the server to listen on the specified port
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
