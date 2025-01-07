@@ -51,6 +51,11 @@ const OAuthCredentials = mongoose.model(
   OAuthCredentialsSchema
 );
 
+app.use((req, res, next) => {
+  console.log("Incoming headers:", req.headers);
+  next();
+});
+
 // GHL SSO Guard middleware
 function ghlSsoGuard(req, res, next) {
   const encryptedSession = req.headers["x-sso-session"];
