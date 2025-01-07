@@ -21,9 +21,13 @@ app.use(logger("dev"));
 
 // Middleware to parse JSON
 app.use(express.json());
-
-// Apply CORS middleware globally
-app.use(cors());
+app.use(
+  cors({
+    origin: "*", // Replace '*' with specific domains for better security
+    methods: ["*"],
+    allowedHeaders: ["Content-Type", "x-sso-session"],
+  })
+);
 
 // Connect to MongoDB
 mongoose
