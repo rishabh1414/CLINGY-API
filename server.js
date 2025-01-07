@@ -23,7 +23,7 @@ app.use(logger("dev"));
 app.use(express.json());
 app.use(
   cors({
-    origin: "*", // Replace '*' with specific domains for better security
+    origin: "https://sso-app.clingy.app", // Replace '*' with specific domains for better security
     methods: ["*"],
     allowedHeaders: ["Content-Type", "x-sso-session"],
   })
