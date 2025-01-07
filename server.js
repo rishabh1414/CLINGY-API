@@ -266,7 +266,7 @@ app.post("/api/get-location-token", async (req, res) => {
 
     const data = response.data;
 
-    if (response.status === 200) {
+    if (response.status === 201) {
       // Return the location access token in the response
       return res.json(data);
     } else {
