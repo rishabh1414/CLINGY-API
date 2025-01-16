@@ -151,6 +151,9 @@ app.get("/oauth/callback", async (req, res) => {
 });
 
 // Function to exchange the authorization code for an access token
+/**
+ * Function to exchange authorization code for an access token
+ */
 async function getAccessToken(code) {
   const body = qs.stringify({
     client_id: process.env.GHL_CLIENT_ID,
@@ -164,45 +167,21 @@ async function getAccessToken(code) {
       `${process.env.GHL_API_DOMAIN}/oauth/token`,
       body,
       {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
       }
     );
 
-    if (response.data && response.data.access_token) {
-      // Return credentials (access token and refresh token)
-      return response.data;
-    } else {
-      throw new Error("Failed to obtain access token");
-    }
+    if (response.data?.access_token) return response.data;
+    throw new Error("Failed to obtain access token");
   } catch (error) {
-    console.error("Error exchanging code for access token:", error);
+    console.error("❌ Error exchanging code for access token:", error);
+    throw error;
   }
 }
 
-// Function to refresh the access token before it expires
-async function setTokenRefresh(oauthCredentials) {
-  const refreshTokenBeforeExpiry = oauthCredentials.expires_in - 300; // Refresh 5 minutes before expiration
-
-  setTimeout(async () => {
-    try {
-      const newCredentials = await refreshAccessToken(
-        oauthCredentials.refresh_token
-      );
-      // Save the new credentials to the database
-      await OAuthCredentials.updateOne(
-        { refresh_token: oauthCredentials.refresh_token },
-        { $set: newCredentials }
-      );
-      console.log("Access token refreshed successfully.");
-    } catch (error) {
-      console.error("Error refreshing access token:", error);
-    }
-  }, refreshTokenBeforeExpiry * 1000); // Set timeout in milliseconds
-}
-
-// Function to refresh the access token
+/**
+ * Function to refresh the access token
+ */
 async function refreshAccessToken(refresh_token) {
   const body = qs.stringify({
     client_id: process.env.GHL_CLIENT_ID,
@@ -216,19 +195,63 @@ async function refreshAccessToken(refresh_token) {
       `${process.env.GHL_API_DOMAIN}/oauth/token`,
       body,
       {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
       }
     );
 
-    return response.data; // Return new credentials
+    if (response.data?.access_token) return response.data;
+    throw new Error("Failed to refresh access token");
   } catch (error) {
-    console.error("Error refreshing access token:", error);
-    throw new Error(`Error refreshing access token: ${error.message}`);
+    console.error("❌ Error refreshing access token:", error);
+    throw error;
   }
 }
 
+/**
+ * ⏰ Scheduled Job to Check Token Expiration (Runs Every 5 Minutes)
+ * ✅ ADDED: This replaces the `setTimeout` method
+ */
+cron.schedule("*/5 * * * *", async () => {
+  console.log("🔄 Checking for expired tokens...");
+
+  const currentTime = Math.floor(Date.now() / 1000); // Get current time in seconds
+
+  try {
+    const oauthCredentialsList = await OAuthCredentials.find({});
+
+    for (const credential of oauthCredentialsList) {
+      const tokenExpiryTime =
+        credential.created_at.getTime() / 1000 + credential.expires_in;
+
+      if (currentTime >= tokenExpiryTime - 300) {
+        console.log(
+          `⚠️ Token expired for companyId: ${credential.companyId}, refreshing...`
+        );
+
+        try {
+          const newCredentials = await refreshAccessToken(
+            credential.refresh_token
+          );
+
+          await OAuthCredentials.updateOne(
+            { refresh_token: credential.refresh_token },
+            { $set: newCredentials }
+          );
+
+          console.log("✅ Access token refreshed successfully.");
+        } catch (error) {
+          console.error("❌ Error refreshing access token:", error);
+        }
+      } else {
+        console.log(
+          `✅ Token is still valid for companyId: ${credential.companyId}`
+        );
+      }
+    }
+  } catch (error) {
+    console.error("❌ Error checking token expiration:", error);
+  }
+});
 // API to get location access token using companyId and locationId
 app.post("/api/get-location-token", async (req, res) => {
   const { companyId, locationId } = req.body;
