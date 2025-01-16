@@ -110,9 +110,8 @@ app.get("/api/sso/ghl", ghlSsoGuard, (req, res) => {
 // OAuth callback endpoint
 app.get("/oauth/callback", async (req, res) => {
   const { code } = req.query;
-  if (!code) {
+  if (!code)
     return res.status(400).send("No OAuth Authorization Code received.");
-  }
 
   try {
     const credentials = await getAccessToken(code);
@@ -128,7 +127,7 @@ app.get("/oauth/callback", async (req, res) => {
     // Delete existing records with the same companyId
     await OAuthCredentials.deleteMany({ companyId });
 
-    // Save the new record to MongoDB
+    // Save new OAuth credentials
     const oauthCredentials = new OAuthCredentials({
       access_token,
       refresh_token,
@@ -138,19 +137,15 @@ app.get("/oauth/callback", async (req, res) => {
       companyId,
     });
 
-    await oauthCredentials.save(); // Save the new record
-
-    // Set up automatic refresh before the token expires (86400 seconds)
-    setTokenRefresh(oauthCredentials);
+    await oauthCredentials.save();
 
     return res.redirect(process.env.GHL_THANK_YOU_PAGE_URL);
   } catch (error) {
-    console.error("Error during OAuth token exchange:", error);
+    console.error("❌ Error during OAuth token exchange:", error);
     return res.status(500).send("Error during OAuth token exchange");
   }
 });
 
-// Function to exchange the authorization code for an access token
 /**
  * Function to exchange authorization code for an access token
  */
@@ -252,6 +247,7 @@ cron.schedule("*/5 * * * *", async () => {
     console.error("❌ Error checking token expiration:", error);
   }
 });
+
 // API to get location access token using companyId and locationId
 app.post("/api/get-location-token", async (req, res) => {
   const { companyId, locationId } = req.body;
