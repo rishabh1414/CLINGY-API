@@ -93,7 +93,9 @@ function ghlSsoGuard(req, res, next) {
     });
   }
 }
-
+app.get("/", (req, res) => {
+  res.send("Hello, World!");
+});
 // Controller logic for '/api/sso/ghl'
 app.get("/api/sso/ghl", ghlSsoGuard, (req, res) => {
   console.debug("getUserInfo", req.user);
@@ -206,7 +208,7 @@ async function refreshAccessToken(refresh_token) {
  * ⏰ Scheduled Job to Check Token Expiration (Runs Every 5 Minutes)
  * ✅ ADDED: This replaces the `setTimeout` method
  */
-cron.schedule("*/5 * * * *", async () => {
+cron.schedule("0 0 * * *", async () => {
   console.log("🔄 Checking for expired tokens...");
 
   const currentTime = Math.floor(Date.now() / 1000); // Get current time in seconds
@@ -218,9 +220,11 @@ cron.schedule("*/5 * * * *", async () => {
       const tokenExpiryTime =
         credential.created_at.getTime() / 1000 + credential.expires_in;
 
-      if (currentTime >= tokenExpiryTime - 300) {
+      // Refresh token 24 hours before expiration
+      if (currentTime >= tokenExpiryTime - 86400) {
+        // 86400 seconds = 24 hours
         console.log(
-          `⚠️ Token expired for companyId: ${credential.companyId}, refreshing...`
+          `⚠️ Token for companyId: ${credential.companyId} is expiring within 24 hours, refreshing...`
         );
 
         try {
