@@ -126,19 +126,33 @@ app.get("/oauth/callback", async (req, res) => {
       companyId,
     } = credentials;
 
-    // Delete existing records with the same companyId
-    await OAuthCredentials.deleteMany({ companyId });
+    // // Delete existing records with the same companyId
+    // await OAuthCredentials.deleteMany({ companyId });
 
-    // Save new OAuth credentials
-    const oauthCredentials = new OAuthCredentials({
-      access_token,
-      refresh_token,
-      expires_in,
-      userId,
-      locationId,
-      companyId,
-    });
-
+    // // Save new OAuth credentials
+    // const oauthCredentials = new OAuthCredentials({
+    //   access_token,
+    //   refresh_token,
+    //   expires_in,
+    //   userId,
+    //   locationId,
+    //   companyId,
+    // });
+    await OAuthCredentials.findOneAndUpdate(
+      { companyId },
+      {
+        $set: {
+          access_token,
+          refresh_token,
+          expires_in,
+          userId,
+          locationId,
+          companyId,
+          created_at: new Date(),
+        },
+      },
+      { upsert: true, new: true }
+    );
     await oauthCredentials.save();
 
     return res.redirect(process.env.GHL_THANK_YOU_PAGE_URL);
@@ -211,44 +225,53 @@ async function refreshAccessToken(refresh_token) {
 cron.schedule("0 0 * * *", async () => {
   console.log("🔄 Checking for expired tokens...");
 
-  const currentTime = Math.floor(Date.now() / 1000); // Get current time in seconds
+  const currentTime = Math.floor(Date.now() / 1000); // Current time in seconds
 
   try {
     const oauthCredentialsList = await OAuthCredentials.find({});
 
-    for (const credential of oauthCredentialsList) {
-      const tokenExpiryTime =
-        credential.created_at.getTime() / 1000 + credential.expires_in;
+    // Parallel execution using Promise.all
+    await Promise.all(
+      oauthCredentialsList.map(async (credential) => {
+        const tokenExpiryTime =
+          credential.created_at.getTime() / 1000 + credential.expires_in;
 
-      // Refresh token 24 hours before expiration
-      if (currentTime >= tokenExpiryTime - 86400) {
-        // 86400 seconds = 24 hours
-        console.log(
-          `⚠️ Token for companyId: ${credential.companyId} is expiring within 24 hours, refreshing...`
-        );
-
-        try {
-          const newCredentials = await refreshAccessToken(
-            credential.refresh_token
+        if (currentTime >= tokenExpiryTime - 86400) {
+          // 24 hours before expiration
+          console.log(
+            `⚠️ Token for companyId: ${credential.companyId} is expiring soon, refreshing...`
           );
 
-          await OAuthCredentials.updateOne(
-            { refresh_token: credential.refresh_token },
-            { $set: newCredentials }
-          );
+          try {
+            const newCredentials = await refreshAccessToken(
+              credential.refresh_token
+            );
 
-          console.log("✅ Access token refreshed successfully.");
-        } catch (error) {
-          console.error("❌ Error refreshing access token:", error);
+            await OAuthCredentials.updateOne(
+              { refresh_token: credential.refresh_token },
+              { $set: newCredentials }
+            );
+
+            console.log(
+              `✅ Token refreshed for companyId: ${credential.companyId}`
+            );
+          } catch (error) {
+            console.error(
+              `❌ Error refreshing token for companyId: ${credential.companyId}`,
+              error
+            );
+          }
+        } else {
+          console.log(
+            `✅ Token still valid for companyId: ${credential.companyId}`
+          );
         }
-      } else {
-        console.log(
-          `✅ Token is still valid for companyId: ${credential.companyId}`
-        );
-      }
-    }
+      })
+    );
+
+    console.log("✅ Token check completed successfully.");
   } catch (error) {
-    console.error("❌ Error checking token expiration:", error);
+    console.error("❌ Error during token expiration check:", error);
   }
 });
 
@@ -264,8 +287,11 @@ app.post("/api/get-location-token", async (req, res) => {
 
   try {
     // Step 1: Get the access token for the agency (company)
-    const agencyTokens = await OAuthCredentials.findOne({ companyId });
-
+    // const agencyTokens = await OAuthCredentials.findOne({ companyId });
+    const agencyTokens = await OAuthCredentials.findOne(
+      { companyId },
+      { access_token: 1, refresh_token: 1, _id: 0 } // Only fetch necessary fields
+    );
     if (!agencyTokens) {
       return res.status(404).json({
         message: "Agency tokens not found for the provided companyId",
@@ -313,7 +339,11 @@ app.post("/api/store-token", async (req, res) => {
 
   try {
     // Fetch OAuth credentials from the database
-    const oauthCredentials = await OAuthCredentials.findOne({});
+    // const oauthCredentials = await OAuthCredentials.findOne({});
+    const oauthCredentials = await OAuthCredentials.findOne(
+      {},
+      { access_token: 1 }
+    );
     if (!oauthCredentials) {
       return res
         .status(400)
@@ -349,4 +379,13 @@ app.post("/api/store-token", async (req, res) => {
 // Set the server to listen on the specified port
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+});
+setInterval(() => {
+  const used = process.memoryUsage();
+  console.log(
+    `📊 Memory Usage: ${(used.heapUsed / 1024 / 1024).toFixed(2)} MB`
+  );
+}, 60000); // Logs memory every 60 seconds
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled Rejection:", reason);
 });
