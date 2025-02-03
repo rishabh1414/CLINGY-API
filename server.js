@@ -22,14 +22,24 @@ app.use(logger("dev"));
 // Middleware to parse JSON
 app.use(express.json());
 
-app.use(
-  cors({
-    origin: "https://sso-app.clingy.app", // Explicitly allow your frontend domain
-    credentials: true, // Allow credentials (cookies, authorization headers)
-    methods: ["GET", "POST", "OPTIONS"], // Explicitly specify allowed methods
-    allowedHeaders: ["Content-Type", "x-sso-session"], // Allowed custom headers
-  })
-);
+// app.use(
+//   cors({
+//     origin: "https://sso-app.clingy.app", // Explicitly allow your frontend domain
+//     credentials: true, // Allow credentials (cookies, authorization headers)
+//     methods: ["GET", "POST", "OPTIONS"], // Explicitly specify allowed methods
+//     allowedHeaders: ["Content-Type", "x-sso-session"], // Allowed custom headers
+//   })
+// );
+
+const corsOptions = {
+  origin: "https://sso-app.clingy.app",
+  credentials: true,
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "x-sso-session", "Authorization"], // Added Authorization header
+  optionsSuccessStatus: 204, // To handle legacy browsers
+};
+
+app.use(cors(corsOptions));
 
 app.options("/api/sso/ghl", (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "https://sso-app.clingy.app");
