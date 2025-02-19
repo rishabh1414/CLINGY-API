@@ -119,7 +119,6 @@ app.get("/api/sso/ghl", ghlSsoGuard, (req, res) => {
   res.json(req.user); // Send user data as JSON response
 });
 
-// OAuth callback endpoint
 app.get("/oauth/callback", async (req, res) => {
   const { code } = req.query;
   if (!code)
@@ -136,18 +135,7 @@ app.get("/oauth/callback", async (req, res) => {
       companyId,
     } = credentials;
 
-    // // Delete existing records with the same companyId
-    // await OAuthCredentials.deleteMany({ companyId });
-
-    // // Save new OAuth credentials
-    // const oauthCredentials = new OAuthCredentials({
-    //   access_token,
-    //   refresh_token,
-    //   expires_in,
-    //   userId,
-    //   locationId,
-    //   companyId,
-    // });
+    // Find and update (or insert) the OAuth credentials
     await OAuthCredentials.findOneAndUpdate(
       { companyId },
       {
@@ -163,7 +151,6 @@ app.get("/oauth/callback", async (req, res) => {
       },
       { upsert: true, new: true }
     );
-    await oauthCredentials.save();
 
     return res.redirect(process.env.GHL_THANK_YOU_PAGE_URL);
   } catch (error) {
