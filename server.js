@@ -42,11 +42,18 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 app.options("/api/sso/ghl", (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "https://sso-app.clingy.app");
-  res.setHeader("Access-Control-Allow-Credentials", "true"); // Ensure it's a string "true"
+  const allowedOrigins = [
+    "https://sso-app.clingy.app",
+    "http://127.0.0.1:5500",
+  ];
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-sso-session");
-  res.status(204).send(); // Send a 204 No Content response for OPTIONS
+  res.status(204).send();
 });
 
 // Connect to MongoDB
