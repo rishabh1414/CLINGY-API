@@ -78,32 +78,6 @@ const OAuthCredentials = mongoose.model(
   OAuthCredentialsSchema
 );
 
-// Endpoint to proxy Make API request
-app.get("/get-ticket-data", async (req, res) => {
-  try {
-    const makeResponse = await fetch(
-      "https://us1.make.com/api/v2/data-stores/63989/data",
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Token 90580494-bb48-4f18-94cf-24bbe10c282d",
-        },
-      }
-    );
-    if (!makeResponse.ok) {
-      return res
-        .status(makeResponse.status)
-        .json({ error: "Error fetching data from Make API" });
-    }
-    const data = await makeResponse.json();
-    res.json(data);
-  } catch (error) {
-    console.error("Error calling Make API:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
 // GHL SSO Guard middleware
 function ghlSsoGuard(req, res, next) {
   const encryptedSession = req.headers["x-sso-session"];
